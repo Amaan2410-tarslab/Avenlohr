@@ -29,7 +29,7 @@ export async function submitReport(input: {
 
   if (!profile || profile.status === "suspended") return { ok: false, message: "This account cannot submit reports." };
 
-  let targetExists = false;
+  let targetExists: boolean;
 
   if (parsed.data.targetType === "job") {
     const { data } = await supabase.from("jobs").select("id").eq("id", parsed.data.targetId).maybeSingle();
