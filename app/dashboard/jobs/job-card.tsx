@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { applyToJob } from "./actions";
+import { ReportButton } from "@/app/components/report-button";
 
 export function JobCard({ job, applied }: { job: { id: string; title: string; description: string; location: string | null; work_mode: string | null; seniority: string | null; experience_years: number | null; company_name: string | null }; applied: boolean }) {
   const [pending, startTransition] = useTransition();
@@ -24,6 +25,7 @@ export function JobCard({ job, applied }: { job: { id: string; title: string; de
     <div className="actions">
       <Link className="btn" href={"/dashboard/jobs/" + job.id}>View details</Link>
       <button className="btn primary" type="button" onClick={apply} disabled={pending || applied}>{pending ? "Applying…" : applied ? "Applied" : "Apply"}</button>
+      <ReportButton targetType="job" targetId={job.id} />
     </div>
     {message ? <p className="muted" role="status">{message}</p> : null}
   </article>;
