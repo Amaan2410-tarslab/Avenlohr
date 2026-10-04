@@ -136,9 +136,16 @@ begin
 end $;
 
 update public.jobs
-set title='Edited Moderation Test Job',
+set title='Edited Security Test Job',
     description='Edited company-created job'
 where title='Security Test Job';
+
+do $
+declare s public.job_status;
+begin
+  select status into s from public.jobs where title='Edited Security Test Job';
+  if s <> 'pending_review' then raise exception 'B8 failed: material edit bypassed re-review'; end if;
+end $;
 
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
