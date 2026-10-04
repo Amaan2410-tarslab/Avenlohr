@@ -19,6 +19,16 @@ export type CandidateSignals = {
 const normalise = (value: string) => value.trim().toLowerCase().replace(/[._-]+/g, " ").replace(/\s+/g, " ");
 const normaliseSkill = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9+#]/g, "");
 
+const normaliseLocation = (value: string) => {
+  const location = normalise(value).split(",")[0]?.trim() ?? "";
+  const aliases: Record<string, string> = {
+    bangalore: "bengaluru",
+    bombay: "mumbai",
+    calcutta: "kolkata",
+  };
+  return aliases[location] ?? location;
+};
+
 const normaliseSeniority = (value: string) => {
   const valueKey = normalise(value);
   if (["sr", "senior", "senior level"].includes(valueKey)) return "senior";
@@ -47,11 +57,29 @@ function overlap(required: string[], actual: string[]) {
   return { matched, ratio: requiredUnique.length ? matched.length / requiredUnique.length : 0, active: requiredUnique.length > 0 };
 }
 
-function fieldScore(required: string | undefined, actual: string | undefined, kind: "normal" | "seniority" | "workMode" = "normal") {
+function fieldScore(
+  required: string | undefined,
+  actual: string | undefined,
+  kind: "normal" | "seniority" | "workMode" | "location" = "normal",
+) {
   if (!required?.trim()) return { score: 0, active: false };
   if (!actual?.trim()) return { score: 0, active: true };
-  const requiredValue = kind === "seniority" ? normaliseSeniority(required) : kind === "workMode" ? normaliseWorkMode(required) : normalise(required);
-  const actualValue = kind === "seniority" ? normaliseSeniority(actual) : kind === "workMode" ? normaliseWorkMode(actual) : normalise(actual);
+  const requiredValue =
+    kind === "seniority"
+      ? normaliseSeniority(required)
+      : kind === "workMode"
+        ? normaliseWorkMode(required)
+        : kind === "location"
+          ? normaliseLocation(required)
+          : normalise(required);
+  const actualValue =
+    kind === "seniority"
+      ? normaliseSeniority(actual)
+      : kind === "workMode"
+        ? normaliseWorkMode(actual)
+        : kind === "location"
+          ? normaliseLocation(actual)
+          : normalise(actual);
   return { score: requiredValue === actualValue ? 1 : 0, active: true };
 }
 
@@ -69,7 +97,7 @@ export function explainMatch(requirement: MatchRequirement, candidate: Candidate
     : 0;
 
   const seniority = fieldScore(requirement.seniority, candidate.seniority, "seniority");
-  const location = fieldScore(requirement.location, candidate.location);
+  const location = fieldScore(requirement.location, candidate.location, "location");
   const workMode = fieldScore(requirement.workMode, candidate.workMode, "workMode");
   const industry = fieldScore(requirement.industry, candidate.industry);
   const remoteRequirement = requirement.workMode ? normaliseWorkMode(requirement.workMode) === "remote" : false;
