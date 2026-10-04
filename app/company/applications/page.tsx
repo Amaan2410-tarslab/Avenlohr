@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { updateCompanyApplicationStatus } from "./actions";
+import { ReportButton } from "@/app/components/report-button";
 
 type ApplicationStatus = "submitted" | "reviewing" | "shortlisted" | "rejected" | "hired";
 
@@ -288,6 +289,7 @@ function ApplicantCard({
           </select>
         </label>
         {pending ? <span className="muted">Updating…</span> : null}
+        <ReportButton targetType="candidate" targetId={application.candidate_id} />
       </div>
       {message ? <p className="muted" role="status">{message}</p> : null}
     </article>
