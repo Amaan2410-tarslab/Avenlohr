@@ -117,12 +117,29 @@ end $$;
 insert into public.jobs(company_id,created_by,title,description,status)
 select c.id,'00000000-0000-0000-0000-000000000003','Moderation Test Job','Company-created job','open'
 from public.companies c where c.owner_id='00000000-0000-0000-0000-000000000003';
-do $$
+
+insert into public.jobs(company_id,created_by,title,description,status)
+select c.id,'00000000-0000-0000-0000-000000000003','Draft Test Job','Company draft fixture','draft'
+from public.companies c where c.owner_id='00000000-0000-0000-0000-000000000003';
+
+do $
+declare s public.job_status;
+begin
+  select status into s from public.jobs where title='Draft Test Job';
+  if s <> 'draft' then raise exception 'B8 failed: company draft was auto-published to review'; end if;
+end $;
+do $
 declare s public.job_status;
 begin
   select status into s from public.jobs where title='Moderation Test Job';
   if s <> 'pending_review' then raise exception 'company published a job without moderation'; end if;
-end $$;
+end $;
+
+update public.jobs
+set title='Edited Moderation Test Job',
+    description='Edited company-created job'
+where title='Security Test Job';
+
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
 do $$
