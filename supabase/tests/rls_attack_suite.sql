@@ -56,16 +56,33 @@ begin
 end $$;
 
 -- B1: candidate must not delete and re-submit the application.
+-- DELETE is filtered by RLS rather than necessarily raising an error, so assert
+-- that the protected row still exists after the attempted deletion.
 do $$
+declare
+  before_count integer;
+  after_count integer;
 begin
-  begin
-    delete from public.applications a using public.jobs j
-    where a.job_id = j.id and a.candidate_id = '00000000-0000-0000-0000-000000000001'
-      and j.title = 'Security Test Job';
+  select count(*) into before_count
+  from public.applications a
+  join public.jobs j on j.id = a.job_id
+  where j.title = 'Security Test Job'
+    and a.candidate_id = '00000000-0000-0000-0000-000000000001';
+
+  delete from public.applications a using public.jobs j
+  where a.job_id = j.id
+    and a.candidate_id = '00000000-0000-0000-0000-000000000001'
+    and j.title = 'Security Test Job';
+
+  select count(*) into after_count
+  from public.applications a
+  join public.jobs j on j.id = a.job_id
+  where j.title = 'Security Test Job'
+    and a.candidate_id = '00000000-0000-0000-0000-000000000001';
+
+  if before_count <> 1 or after_count <> 1 then
     raise exception 'B1 failed: candidate application deletion succeeded';
-  exception when insufficient_privilege then
-    null;
-  end;
+  end if;
 end $$;
 
 -- Role escalation must not work through the profile update API.
