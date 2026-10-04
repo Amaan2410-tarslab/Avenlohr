@@ -19,6 +19,9 @@ export type CandidateSignals = {
 const normalise = (value: string) =>
   value.trim().toLowerCase().replace(/[._-]+/g, " ").replace(/\s+/g, " ");
 
+const normaliseSkill = (value: string) =>
+  value.trim().toLowerCase().replace(/[^a-z0-9+#]/g, "");
+
 const normaliseSeniority = (value: string) => {
   const valueKey = normalise(value);
   if (["sr", "senior", "senior level"].includes(valueKey)) return "senior";
@@ -35,13 +38,13 @@ const normaliseWorkMode = (value: string) => {
   return valueKey;
 };
 
-function uniqueNormalised(values: string[]) {
-  return [...new Set(values.map(normalise).filter(Boolean))];
+function uniqueNormalised(values: string[], normalizer: (value: string) => string = normalise) {
+  return [...new Set(values.map(normalizer).filter(Boolean))];
 }
 
 function overlap(required: string[], actual: string[]) {
-  const requiredUnique = uniqueNormalised(required);
-  const available = new Set(uniqueNormalised(actual));
+  const requiredUnique = uniqueNormalised(required, normaliseSkill);
+  const available = new Set(uniqueNormalised(actual, normaliseSkill));
   const matched = requiredUnique.filter((item) => available.has(item));
   return {
     matched,
@@ -68,9 +71,9 @@ function fieldScore(required: string | undefined, actual: string | undefined, ki
 
 export function explainMatch(requirement: MatchRequirement, candidate: CandidateSignals) {
   const skill = overlap(requirement.skills, candidate.skills);
-  const experienceActive = requirement.experienceYears != null && requirement.experienceYears >= 0;
+  const experienceActive = requirement.experienceYears != null && Number.isFinite(requirement.experienceYears) && requirement.experienceYears >= 0;
   const experience = experienceActive
-    ? candidate.experienceYears == null
+    ? candidate.experienceYears == null || !Number.isFinite(candidate.experienceYears)
       ? 0
       : Math.min(Math.max(candidate.experienceYears, 0) / Math.max(requirement.experienceYears, 1), 1)
     : 0;
