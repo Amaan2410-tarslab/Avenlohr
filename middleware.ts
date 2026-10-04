@@ -36,12 +36,20 @@ export async function middleware(request: NextRequest) {
   if (user && isProtected) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("status")
+      .select("status, role")
       .eq("id", user.id)
       .maybeSingle();
 
     if (profile?.status === "suspended") {
       return NextResponse.redirect(new URL("/account-suspended", request.url));
+    }
+
+    if (
+      profile &&
+      !["staff", "founder"].includes((profile as { role?: string }).role ?? "") &&
+      !user.email_confirmed_at
+    ) {
+      return NextResponse.redirect(new URL("/verify-email", request.url));
     }
   }
 
