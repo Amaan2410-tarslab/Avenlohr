@@ -49,12 +49,16 @@ values
   ('00000000-0000-0000-0000-000000000002', 3)
 on conflict (user_id) do nothing;
 
+select id as security_test_job_id
+from public.jobs
+where title = 'Security Test Job'
+\gset
+
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 
 insert into public.applications(job_id, candidate_id, status, match_score, match_explanation)
-select id, '00000000-0000-0000-0000-000000000001', 'hired', 100, '{"forged":true}'::jsonb
-from public.jobs where title = 'Security Test Job'
+values (:'security_test_job_id', '00000000-0000-0000-0000-000000000001', 'hired', 100, '{"forged":true}'::jsonb)
 on conflict (job_id, candidate_id) do nothing;
 
 do $$
