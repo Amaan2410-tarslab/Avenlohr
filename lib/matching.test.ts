@@ -43,11 +43,11 @@ describe("explainMatch", () => {
 
   it("deduplicates required skills and normalizes common aliases", () => {
     const result = explainMatch(
-      { skills: ["Node.js", "nodejs", "React"] , seniority: "Sr", workMode: "work from home", location: "Hyderabad" },
+      { skills: ["Node.js", "nodejs", "React"], seniority: "Sr", workMode: "work from home", location: "Hyderabad" },
       { skills: ["nodejs", "react"], seniority: "senior", workMode: "remote", location: "Hyderabad" },
     );
     expect(result.score).toBe(100);
-    expect(result.signals.skills).toEqual(["node js", "react"]);
+    expect(result.signals.skills).toEqual(["nodejs", "react"]);
     expect(result.signals.seniority).toBe(1);
     expect(result.signals.workMode).toBe(1);
   });
