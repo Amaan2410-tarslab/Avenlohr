@@ -10,6 +10,20 @@ insert into auth.users(id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-000000000006', 'company-b@example.test', '{"full_name":"Company B","account_type":"company"}')
 on conflict (id) do nothing;
 
+insert into public.profiles(id, email, full_name, role, status)
+values
+  ('00000000-0000-0000-0000-000000000001','candidate-a@example.test','Candidate A','candidate','active'),
+  ('00000000-0000-0000-0000-000000000002','candidate-b@example.test','Candidate B','candidate','active'),
+  ('00000000-0000-0000-0000-000000000003','company-a@example.test','Company A','company','active'),
+  ('00000000-0000-0000-0000-000000000004','staff@example.test','Staff','staff','active'),
+  ('00000000-0000-0000-0000-000000000005','founder@example.test','Founder','founder','active'),
+  ('00000000-0000-0000-0000-000000000006','company-b@example.test','Company B','company','active')
+on conflict (id) do update
+set email=excluded.email,
+    full_name=excluded.full_name,
+    role=excluded.role,
+    status=excluded.status;
+
 update public.profiles set role = 'staff' where id = '00000000-0000-0000-0000-000000000004';
 update public.profiles set role = 'founder' where id = '00000000-0000-0000-0000-000000000005';
 
