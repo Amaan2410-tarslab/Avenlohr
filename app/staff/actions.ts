@@ -61,9 +61,10 @@ export async function calculateApplicationMatch(input: { applicationId: string }
 
   if (!application) return { ok: false, message: "Application not found." };
 
-  const [{ data: job }, { data: candidate }, { data: skills }] = await Promise.all([
+  const [{ data: job }, { data: candidate }, { data: candidateProfile }, { data: skills }] = await Promise.all([
     supabase.from("jobs").select("skills, experience_years, seniority, location, work_mode, industry").eq("id", application.job_id).maybeSingle(),
-    supabase.from("candidate_profiles").select("experience_years, seniority, work_mode, industry, location").eq("user_id", application.candidate_id).maybeSingle(),
+    supabase.from("candidate_profiles").select("experience_years, seniority, work_mode, industry").eq("user_id", application.candidate_id).maybeSingle(),
+    supabase.from("profiles").select("location").eq("id", application.candidate_id).maybeSingle(),
     supabase.from("candidate_skills").select("skill").eq("user_id", application.candidate_id),
   ]);
 
@@ -83,7 +84,7 @@ export async function calculateApplicationMatch(input: { applicationId: string }
       skills: (skills ?? []).map((item) => item.skill),
       experienceYears: candidate.experience_years ?? undefined,
       seniority: candidate.seniority ?? undefined,
-      location: candidate.location ?? undefined,
+      location: candidateProfile?.location ?? undefined,
       workMode: candidate.work_mode ?? undefined,
       industry: candidate.industry ?? undefined,
     },
