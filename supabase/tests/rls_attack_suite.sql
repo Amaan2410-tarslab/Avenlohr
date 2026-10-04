@@ -327,7 +327,7 @@ where title='Security Test Job';
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
 
-do $
+do $b6$
 declare n integer;
 begin
   select count(*) into n
@@ -339,7 +339,7 @@ begin
   from public.companies
   where name='Avenlo Test Co';
   if n <> 1 then raise exception 'B6 failed: candidate cannot see applied company'; end if;
-end $;
+end $b6$;
 
 -- Structured education ownership.
 insert into public.candidate_education(user_id, institution, degree)
