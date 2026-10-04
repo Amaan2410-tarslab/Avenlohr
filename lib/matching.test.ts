@@ -63,4 +63,27 @@ describe("explainMatch", () => {
     expect(result.score).toBe(100);
     expect(result.signals.location).toBe(0);
   });
+
+  it("normalizes common location variants", () => {
+    const result = explainMatch(
+      { skills: ["React"], location: "Hyderabad, Telangana" },
+      { skills: ["React"], location: "Hyderabad" },
+    );
+    expect(result.score).toBe(100);
+    expect(result.signals.location).toBe(1);
+  });
+
+  it("never produces an invalid score for non-finite experience values", () => {
+    const results = [
+      explainMatch({ skills: [], experienceYears: Number.NaN }, { skills: [], experienceYears: 4 }),
+      explainMatch({ skills: [], experienceYears: Number.POSITIVE_INFINITY }, { skills: [], experienceYears: 4 }),
+      explainMatch({ skills: [], experienceYears: 4 }, { skills: [], experienceYears: Number.NaN }),
+      explainMatch({ skills: [], experienceYears: 4 }, { skills: [], experienceYears: Number.POSITIVE_INFINITY }),
+    ];
+    for (const result of results) {
+      expect(Number.isFinite(result.score)).toBe(true);
+      expect(result.score).toBeGreaterThanOrEqual(0);
+      expect(result.score).toBeLessThanOrEqual(100);
+    }
+  });
 });
