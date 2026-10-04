@@ -9,8 +9,22 @@ drop table if exists auth.users cascade;
 create table auth.users (
   id uuid primary key,
   email text,
+  email_confirmed_at timestamptz,
   raw_user_meta_data jsonb not null default '{}'::jsonb
 );
+
+
+insert into auth.users(id, email, email_confirmed_at)
+values
+  ('00000000-0000-0000-0000-000000000001','candidate-a@example.test',now()),
+  ('00000000-0000-0000-0000-000000000002','candidate-b@example.test',now()),
+  ('00000000-0000-0000-0000-000000000003','company-a@example.test',now()),
+  ('00000000-0000-0000-0000-000000000004','staff@example.test',now()),
+  ('00000000-0000-0000-0000-000000000005','founder@example.test',now()),
+  ('00000000-0000-0000-0000-000000000006','company-b@example.test',now())
+on conflict (id) do update
+set email=excluded.email,
+    email_confirmed_at=excluded.email_confirmed_at;
 
 create or replace function auth.uid()
 returns uuid
