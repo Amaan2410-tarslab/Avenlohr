@@ -36,6 +36,9 @@ create table if not exists storage.objects (
   metadata jsonb
 );
 
+alter table storage.objects enable row level security;
+alter table storage.buckets enable row level security;
+
 create or replace function storage.foldername(name text)
 returns text[]
 language sql
