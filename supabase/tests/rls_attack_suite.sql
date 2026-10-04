@@ -327,19 +327,19 @@ where title='Security Test Job';
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
 
-do $$
+do $
 declare n integer;
 begin
   select count(*) into n
   from public.jobs
-  where id=(select id from public.jobs where title='Security Test Job');
+  where title='Security Test Job' and status='closed';
   if n <> 1 then raise exception 'B6 failed: candidate cannot track closed applied job'; end if;
 
   select count(*) into n
-  from public.companies c
-  where c.id=(select company_id from public.jobs where title='Security Test Job');
+  from public.companies
+  where name='Avenlo Test Co';
   if n <> 1 then raise exception 'B6 failed: candidate cannot see applied company'; end if;
-end $$;
+end $;
 
 -- Structured education ownership.
 insert into public.candidate_education(user_id, institution, degree)
