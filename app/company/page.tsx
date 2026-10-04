@@ -75,7 +75,14 @@ export default function CompanyPage() {
   if (loading) return <main className="page"><div className="container hero"><p className="muted">Loading company workspace…</p></div></main>;
 
   return <main className="page">
-    <nav className="nav container"><span className="brand">AVENLO</span><div className="actions"><Link className="btn" href="/">Home</Link><SignOutButton /></div></nav>
+    <nav className="nav container">
+      <span className="brand">AVENLO</span>
+      <div className="actions">
+        <Link className="btn" href="/">Home</Link>
+        {company ? <Link className="btn" href="/company/applications">Review applicants</Link> : null}
+        <SignOutButton />
+      </div>
+    </nav>
     <section className="hero container" style={{ maxWidth: 980 }}>
       <span className="eyebrow">COMPANY WORKSPACE</span><h1>{company ? company.name : "Set up your company."}</h1>
       <p>Describe your organisation and submit structured requirements. Roles are reviewed by Avenlo before candidates can see them.</p>
