@@ -292,7 +292,22 @@ set status='hired'
 where candidate_id='00000000-0000-0000-0000-000000000002'
   and job_id=(select id from public.jobs where title='Other Company Job');
 
-do $$
+-- Company A should be unable to see Candidate B's cross-company application at all.
+do $
+declare n integer;
+begin
+  select count(*) into n
+  from public.applications
+  where candidate_id='00000000-0000-0000-0000-000000000002'
+    and job_id=(select id from public.jobs where title='Other Company Job');
+
+  if n <> 0 then raise exception 'B5 failed: company read cross-company application'; end if;
+end $;
+
+-- Verify from the founder/security-test context that the unauthorized update
+-- did not modify the protected cross-company application.
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000005',false);
+do $
 declare n integer;
 begin
   select count(*) into n
@@ -302,7 +317,7 @@ begin
     and status='submitted';
 
   if n <> 1 then raise exception 'B5 failed: company modified cross-company application'; end if;
-end $$;
+end $;
 
 -- Candidate A retains access to an application-linked job after it closes.
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000005',false);
