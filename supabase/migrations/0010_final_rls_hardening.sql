@@ -2,6 +2,9 @@
 -- This migration deliberately narrows privileged mutation paths and applies
 -- server-side Storage restrictions.
 
+-- This migration is intentionally idempotent because CI and fresh Supabase
+-- environments both apply the complete migration chain from scratch.
+
 -- -----------------------------------------------------------------------------
 -- 1. Staff may review jobs but may not delete company jobs. Founders retain
 --    administrative delete capability.
