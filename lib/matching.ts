@@ -24,23 +24,23 @@ function overlap(required: string[], actual: string[]) {
   return { matched, ratio: required.length ? matched.length / required.length : 1 };
 }
 
+function fieldScore(required: string | undefined, actual: string | undefined) {
+  if (!required) return 1;
+  if (!actual) return 0;
+  return normalise(required) === normalise(actual) ? 1 : 0;
+}
+
 export function explainMatch(requirement: MatchRequirement, candidate: CandidateSignals) {
   const skill = overlap(requirement.skills, candidate.skills);
-  const experience = requirement.experienceYears == null || candidate.experienceYears == null
+  const experience = requirement.experienceYears == null
     ? 1
-    : Math.min(candidate.experienceYears / Math.max(requirement.experienceYears, 1), 1);
-  const seniority = !requirement.seniority || !candidate.seniority
-    ? 1
-    : normalise(requirement.seniority) === normalise(candidate.seniority) ? 1 : 0;
-  const location = !requirement.location || !candidate.location
-    ? 1
-    : normalise(requirement.location) === normalise(candidate.location) ? 1 : 0;
-  const workMode = !requirement.workMode || !candidate.workMode
-    ? 1
-    : normalise(requirement.workMode) === normalise(candidate.workMode) ? 1 : 0;
-  const industry = !requirement.industry || !candidate.industry
-    ? 1
-    : normalise(requirement.industry) === normalise(candidate.industry) ? 1 : 0;
+    : candidate.experienceYears == null
+      ? 0
+      : Math.min(candidate.experienceYears / Math.max(requirement.experienceYears, 1), 1);
+  const seniority = fieldScore(requirement.seniority, candidate.seniority);
+  const location = fieldScore(requirement.location, candidate.location);
+  const workMode = fieldScore(requirement.workMode, candidate.workMode);
+  const industry = fieldScore(requirement.industry, candidate.industry);
 
   const score = Math.round((skill.ratio * 40 + experience * 20 + seniority * 10 + location * 10 + workMode * 10 + industry * 10));
   return {
