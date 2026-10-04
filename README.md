@@ -54,3 +54,5 @@ Candidate CVs live in a private Supabase Storage bucket. Row-level security limi
 ## Deployment
 
 The intended production path is GitHub → Vercel for the Next.js application and Supabase for Auth/Database/Storage. Do not deploy until the verification workflow is green and the Supabase migrations have been applied successfully.
+
+<!-- CI verification trigger: Phase 2.2 security suite -->
