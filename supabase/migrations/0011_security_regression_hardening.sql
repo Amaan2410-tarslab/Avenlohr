@@ -177,9 +177,15 @@ set search_path = ''
 as $$
 declare
   expected_prefix text;
+  candidate_user_id text;
+  candidate_resume_path text;
 begin
-  expected_prefix := new.user_id::text || '/';
-  if new.resume_path is not null and pg_catalog.position(expected_prefix in new.resume_path) <> 1 then
+  candidate_user_id := new.user_id::text;
+  candidate_resume_path := new.resume_path;
+  expected_prefix := candidate_user_id || '/';
+
+  if candidate_resume_path is not null
+     and pg_catalog.position(expected_prefix, candidate_resume_path) <> 1 then
     raise exception 'resume_path must belong to candidate storage folder';
   end if;
   return new;
