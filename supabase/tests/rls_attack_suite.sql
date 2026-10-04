@@ -58,8 +58,7 @@ set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 
 insert into public.applications(job_id, candidate_id, status, match_score, match_explanation)
-values (:'security_test_job_id', '00000000-0000-0000-0000-000000000001', 'hired', 100, '{"forged":true}'::jsonb)
-on conflict (job_id, candidate_id) do nothing;
+values (:'security_test_job_id', '00000000-0000-0000-0000-000000000001', 'hired', 100, '{"forged":true}'::jsonb);
 
 do $$
 declare r public.applications;
