@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { applyToJob } from "./actions";
 
@@ -19,8 +20,11 @@ export function JobCard({ job, applied }: { job: { id: string; title: string; de
     <span className="eyebrow">{job.company_name || "Avenlo company"}</span>
     <h2>{job.title}</h2>
     <p className="muted">{job.description}</p>
-    <p className="muted">{job.location || "Location flexible"} · {job.work_mode || "Work mode flexible"} · {job.seniority || "Any seniority"} · {job.experience_years == null ? "Experience flexible" : `${job.experience_years}+ years`}</p>
-    <button className="btn primary" type="button" onClick={apply} disabled={pending || applied}>{pending ? "Applying…" : applied ? "Applied" : "Apply"}</button>
+    <p className="muted">{job.location || "Location flexible"} · {job.work_mode || "Work mode flexible"} · {job.seniority || "Any seniority"} · {job.experience_years == null ? "Experience flexible" : job.experience_years + "+ years"}</p>
+    <div className="actions">
+      <Link className="btn" href={"/dashboard/jobs/" + job.id}>View details</Link>
+      <button className="btn primary" type="button" onClick={apply} disabled={pending || applied}>{pending ? "Applying…" : applied ? "Applied" : "Apply"}</button>
+    </div>
     {message ? <p className="muted" role="status">{message}</p> : null}
   </article>;
 }
