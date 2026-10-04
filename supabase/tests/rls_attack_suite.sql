@@ -3,8 +3,6 @@
 
 \set ON_ERROR_STOP on
 
--- Fixture identities are created as the database owner so auth triggers can
--- provision their application profiles.
 insert into auth.users(id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-000000000001', 'candidate-a@example.test', '{"full_name":"Candidate A"}'),
   ('00000000-0000-0000-0000-000000000002', 'candidate-b@example.test', '{"full_name":"Candidate B"}'),
@@ -20,73 +18,45 @@ insert into public.companies(owner_id, name)
 values ('00000000-0000-0000-0000-000000000003', 'Avenlo Test Co')
 on conflict do nothing;
 
--- Open fixture job is created as founder, bypassing company moderation only for
--- test setup. Normal company inserts are tested below.
 insert into public.jobs(company_id, created_by, title, description, status)
 select id, '00000000-0000-0000-0000-000000000005', 'Security Test Job', 'Open fixture', 'open'
 from public.companies where owner_id = '00000000-0000-0000-0000-000000000003'
 and not exists (select 1 from public.jobs where title = 'Security Test Job');
 
-\set candidate_a '00000000-0000-0000-0000-000000000001'
-\set candidate_b '00000000-0000-0000-0000-000000000002'
-\set company_a '00000000-0000-0000-0000-000000000003'
-\set staff '00000000-0000-0000-0000-000000000004'
-\set founder '00000000-0000-0000-0000-000000000005'
-
--- Candidate A is the attack identity.
 set role authenticated;
-select set_config('request.jwt.claim.sub', :'candidate_a', false);
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 
 -- B1: forged hiring state/match data must be neutralized.
 insert into public.applications(job_id, candidate_id, status, match_score, match_explanation)
-select id, :'candidate_a'::uuid, 'hired', 100, '{"forged":true}'::jsonb
+select id, '00000000-0000-0000-0000-000000000001', 'hired', 100, '{"forged":true}'::jsonb
 from public.jobs where title = 'Security Test Job'
 on conflict (job_id, candidate_id) do nothing;
 
 do $$
 declare r public.applications;
 begin
-  select a.* into r
-  from public.applications a
-  join public.jobs j on j.id = a.job_id
+  select a.* into r from public.applications a join public.jobs j on j.id = a.job_id
   where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
   if r.status <> 'submitted' or r.match_score is not null or r.match_explanation <> '{}'::jsonb then
     raise exception 'B1 failed: candidate-controlled review fields survived';
   end if;
 end $$;
 
--- B1: candidate must not delete and re-submit the application.
--- DELETE is filtered by RLS rather than necessarily raising an error, so assert
--- that the protected row still exists after the attempted deletion.
+-- B1: RLS may silently filter DELETE, so assert the row remains.
 do $$
-declare
-  before_count integer;
-  after_count integer;
+declare before_count integer; after_count integer;
 begin
-  select count(*) into before_count
-  from public.applications a
-  join public.jobs j on j.id = a.job_id
-  where j.title = 'Security Test Job'
-    and a.candidate_id = '00000000-0000-0000-0000-000000000001';
-
+  select count(*) into before_count from public.applications a join public.jobs j on j.id = a.job_id
+  where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
   delete from public.applications a using public.jobs j
-  where a.job_id = j.id
-    and a.candidate_id = '00000000-0000-0000-0000-000000000001'
-    and j.title = 'Security Test Job';
-
-  select count(*) into after_count
-  from public.applications a
-  join public.jobs j on j.id = a.job_id
-  where j.title = 'Security Test Job'
-    and a.candidate_id = '00000000-0000-0000-0000-000000000001';
-
-  if before_count <> 1 or after_count <> 1 then
-    raise exception 'B1 failed: candidate application deletion succeeded';
-  end if;
+  where a.job_id = j.id and a.candidate_id = '00000000-0000-0000-0000-000000000001' and j.title = 'Security Test Job';
+  select count(*) into after_count from public.applications a join public.jobs j on j.id = a.job_id
+  where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
+  if before_count <> 1 or after_count <> 1 then raise exception 'B1 failed: candidate application deletion succeeded'; end if;
 end $$;
 
--- Role escalation must not work through the profile update API.
-update public.profiles set role = 'founder', status = 'active' where id = :'candidate_a'::uuid;
+-- Role escalation.
+update public.profiles set role = 'founder', status = 'active' where id = '00000000-0000-0000-0000-000000000001';
 do $$
 declare r public.profiles;
 begin
@@ -94,15 +64,14 @@ begin
   if r.role <> 'candidate' then raise exception 'role escalation succeeded'; end if;
 end $$;
 
--- B3: arbitrary audit insertion must fail.
+-- B3: arbitrary audit insertion.
 do $$
 begin
   begin
     insert into public.audit_logs(actor_id, action, entity_type, metadata)
-    values (:'candidate_a'::uuid, 'role.granted', 'profile', '{"granted":"founder"}'::jsonb);
+    values ('00000000-0000-0000-0000-000000000001', 'role.granted', 'profile', '{"granted":"founder"}'::jsonb);
     raise exception 'B3 failed: candidate inserted audit row';
-  exception when insufficient_privilege then
-    null;
+  exception when insufficient_privilege then null;
   end;
 end $$;
 
@@ -110,33 +79,31 @@ end $$;
 do $$
 begin
   begin
-    insert into public.companies(owner_id, name) values (:'candidate_a'::uuid, 'Candidate Attack Co');
+    insert into public.companies(owner_id, name) values ('00000000-0000-0000-0000-000000000001', 'Candidate Attack Co');
     raise exception 'B4 failed: candidate created company';
-  exception when insufficient_privilege then
-    null;
+  exception when insufficient_privilege then null;
   end;
 end $$;
 
--- Candidate cannot manufacture another candidate profile.
-select set_config('request.jwt.claim.sub', :'company_a', false);
+-- Company identity cannot create another candidate profile.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 do $$
 begin
   begin
     insert into public.candidate_profiles(user_id, experience_years)
-    values (:'candidate_b'::uuid, 1);
+    values ('00000000-0000-0000-0000-000000000002', 1);
     raise exception 'B4 failed: company created candidate profile';
-  exception when insufficient_privilege then
-    null;
+  exception when insufficient_privilege then null;
   end;
 end $$;
 
--- Company job creation cannot spoof created_by and cannot publish directly.
+-- Company job creation cannot spoof created_by.
 do $$
 begin
   begin
     insert into public.jobs(company_id, created_by, title, description, status)
-    select c.id, :'candidate_b'::uuid, 'Spoofed Job', 'Attack', 'open'
-    from public.companies c where c.owner_id = :'company_a'::uuid;
+    select c.id, '00000000-0000-0000-0000-000000000002', 'Spoofed Job', 'Attack', 'open'
+    from public.companies c where c.owner_id = '00000000-0000-0000-0000-000000000003';
     raise exception 'created_by spoof succeeded';
   exception when others then
     if sqlerrm like 'created_by spoof succeeded' then raise; end if;
@@ -144,8 +111,8 @@ begin
 end $$;
 
 insert into public.jobs(company_id, created_by, title, description, status)
-select c.id, :'company_a'::uuid, 'Moderation Test Job', 'Company-created job', 'open'
-from public.companies c where c.owner_id = :'company_a'::uuid;
+select c.id, '00000000-0000-0000-0000-000000000003', 'Moderation Test Job', 'Company-created job', 'open'
+from public.companies c where c.owner_id = '00000000-0000-0000-0000-000000000003';
 
 do $$
 declare s public.job_status;
@@ -154,67 +121,59 @@ begin
   if s <> 'pending_review' then raise exception 'company published a job without moderation'; end if;
 end $$;
 
--- Duplicate company name for the same owner must fail.
+-- Duplicate company name for same owner.
 do $$
 begin
   begin
-    insert into public.companies(owner_id, name) values (:'company_a'::uuid, 'Avenlo Test Co');
+    insert into public.companies(owner_id, name) values ('00000000-0000-0000-0000-000000000003', 'Avenlo Test Co');
     raise exception 'duplicate company owner/name succeeded';
-  exception when unique_violation then
-    null;
+  exception when unique_violation then null;
   end;
 end $$;
 
--- Negative experience must fail at the database boundary.
+-- Negative experience.
 do $$
 begin
   begin
     insert into public.candidate_profiles(user_id, experience_years)
-    values (:'candidate_b'::uuid, -50);
+    values ('00000000-0000-0000-0000-000000000002', -50);
     raise exception 'negative experience accepted';
-  exception when check_violation then
-    null;
+  exception when check_violation then null;
   end;
 end $$;
 
--- Resume path must remain in the candidate's own folder.
+-- Cross-user resume path.
 do $$
 begin
   begin
-    update public.candidate_profiles
-    set resume_path = :'candidate_b' || '/resume.pdf'
-    where user_id = :'candidate_a'::uuid;
+    update public.candidate_profiles set resume_path = '00000000-0000-0000-0000-000000000002/resume.pdf'
+    where user_id = '00000000-0000-0000-0000-000000000001';
     raise exception 'cross-user resume path accepted';
   exception when others then
     if sqlerrm like 'cross-user resume path accepted' then raise; end if;
   end;
 end $$;
 
--- Storage: root and another user's folders must be denied.
+-- Storage writes to another user's folder and root.
 do $$
 begin
   begin
-    insert into storage.objects(bucket_id, name) values ('candidate-documents', :'candidate_b' || '/resume.pdf');
+    insert into storage.objects(bucket_id, name) values ('candidate-documents', '00000000-0000-0000-0000-000000000002/resume.pdf');
     raise exception 'cross-user storage write succeeded';
-  exception when insufficient_privilege then
-    null;
+  exception when insufficient_privilege then null;
   end;
   begin
     insert into storage.objects(bucket_id, name) values ('candidate-documents', 'resume.pdf');
     raise exception 'root storage write succeeded';
-  exception when insufficient_privilege then
-    null;
+  exception when insufficient_privilege then null;
   end;
 end $$;
 
--- Candidate A can write only its own canonical resume path.
 insert into storage.objects(bucket_id, name)
-values ('candidate-documents', :'candidate_a' || '/resume.pdf');
+values ('candidate-documents', '00000000-0000-0000-0000-000000000001/resume.pdf');
 
--- Switch to staff and verify staff cannot rewrite application identity or delete
--- a company job. Founder-only deletion is intentionally not tested destructively.
-select set_config('request.jwt.claim.sub', :'staff', false);
-
+-- Staff privilege boundaries.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', false);
 do $$
 declare app_id uuid; job_id uuid;
 begin
@@ -226,22 +185,16 @@ begin
   exception when others then
     if sqlerrm like 'staff changed application candidate_id' then raise; end if;
   end;
-
   select id into job_id from public.jobs where title='Moderation Test Job';
   begin
     delete from public.jobs where id=job_id;
     raise exception 'staff deleted company job';
-  exception when insufficient_privilege then
-    null;
+  exception when insufficient_privilege then null;
   end;
 end $$;
 
--- Storage read isolation: candidate A cannot read candidate B's object.
-select set_config('request.jwt.claim.sub', :'candidate_a', false);
-insert into storage.objects(bucket_id, name)
-values ('candidate-documents', :'candidate_b' || '/resume.pdf')
-on conflict do nothing;
-
+-- Cross-user CV read.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 do $$
 declare n integer;
 begin
@@ -250,9 +203,6 @@ begin
   if n <> 0 then raise exception 'cross-user CV read succeeded'; end if;
 end $$;
 
--- Bucket restrictions are asserted at the database configuration layer. MIME and
--- size enforcement itself is performed by Supabase Storage, so CI checks the
--- production bucket contract while the real project must be smoke-tested too.
 do $$
 declare b storage.buckets;
 begin
