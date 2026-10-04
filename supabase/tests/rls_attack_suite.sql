@@ -21,8 +21,6 @@ select id, '00000000-0000-0000-0000-000000000005', 'Security Test Job', 'Open fi
 from public.companies where owner_id = '00000000-0000-0000-0000-000000000003'
 and not exists (select 1 from public.jobs where title = 'Security Test Job');
 
--- Seed candidate-owned profiles as the database owner, so later UPDATE tests
--- cannot pass merely because the target row does not exist.
 insert into public.candidate_profiles(user_id, experience_years)
 values
   ('00000000-0000-0000-0000-000000000001', 2),
@@ -32,7 +30,6 @@ on conflict (user_id) do nothing;
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 
--- B1: candidate cannot forge review fields.
 insert into public.applications(job_id, candidate_id, status, match_score, match_explanation)
 select id, '00000000-0000-0000-0000-000000000001', 'hired', 100, '{"forged":true}'::jsonb
 from public.jobs where title = 'Security Test Job'
@@ -48,7 +45,6 @@ begin
   end if;
 end $$;
 
--- B1: candidate cannot delete own application.
 do $$
 declare before_count integer; after_count integer;
 begin
@@ -61,7 +57,6 @@ begin
   if before_count <> 1 or after_count <> 1 then raise exception 'B1 failed: application deletion succeeded'; end if;
 end $$;
 
--- Role escalation must remain impossible.
 update public.profiles set role='founder', status='active' where id='00000000-0000-0000-0000-000000000001';
 do $$
 declare r public.profiles;
@@ -70,7 +65,6 @@ begin
   if r.role <> 'candidate' then raise exception 'role escalation succeeded'; end if;
 end $$;
 
--- Audit injection must be denied.
 do $$
 begin
   begin
@@ -81,7 +75,6 @@ begin
   end;
 end $$;
 
--- Candidate cannot create a company.
 do $$
 begin
   begin
@@ -91,7 +84,6 @@ begin
   end;
 end $$;
 
--- Company cannot create another user's candidate profile.
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',false);
 do $$
 begin
@@ -102,7 +94,6 @@ begin
   end;
 end $$;
 
--- Company cannot spoof created_by.
 do $$
 begin
   begin
@@ -115,7 +106,6 @@ begin
   end;
 end $$;
 
--- Company-created jobs require moderation.
 insert into public.jobs(company_id,created_by,title,description,status)
 select c.id,'00000000-0000-0000-0000-000000000003','Moderation Test Job','Company-created job','open'
 from public.companies c where c.owner_id='00000000-0000-0000-0000-000000000003';
@@ -126,7 +116,6 @@ begin
   if s <> 'pending_review' then raise exception 'company published a job without moderation'; end if;
 end $$;
 
--- Negative experience must fail the database constraint for the owning candidate.
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
 do $$
 begin
@@ -137,21 +126,28 @@ begin
   end;
 end $$;
 
--- Cross-user resume path: prove the target row exists and the UPDATE changes zero rows.
+-- Cross-user resume path: the rejection is expected. Catch the trigger/RLS
+-- exception so the suite can continue, then verify the forbidden value did not persist.
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
 do $$
 declare before_count integer; after_count integer;
 begin
   select count(*) into before_count from public.candidate_profiles where user_id='00000000-0000-0000-0000-000000000001';
-  update public.candidate_profiles set resume_path='00000000-0000-0000-0000-000000000002/resume.pdf'
-  where user_id='00000000-0000-0000-0000-000000000001';
+  if before_count <> 1 then raise exception 'resume-path fixture missing'; end if;
+
+  begin
+    update public.candidate_profiles set resume_path='00000000-0000-0000-0000-000000000002/resume.pdf'
+    where user_id='00000000-0000-0000-0000-000000000001';
+  exception when others then
+    null;
+  end;
+
   select count(*) into after_count from public.candidate_profiles
   where user_id='00000000-0000-0000-0000-000000000001'
     and resume_path='00000000-0000-0000-0000-000000000002/resume.pdf';
-  if before_count <> 1 or after_count <> 0 then raise exception 'cross-user resume path accepted'; end if;
+  if after_count <> 0 then raise exception 'cross-user resume path accepted'; end if;
 end $$;
 
--- Storage isolation: another candidate's folder and root paths must be unwritable.
 do $$
 begin
   begin
@@ -166,11 +162,9 @@ begin
   end;
 end $$;
 
--- Own folder is writable.
 insert into storage.objects(bucket_id,name)
 values ('candidate-documents','00000000-0000-0000-0000-000000000001/resume.pdf');
 
--- Candidate cannot read another candidate's CV object.
 do $$
 declare n integer;
 begin
@@ -179,7 +173,6 @@ begin
   if n <> 0 then raise exception 'cross-user CV read succeeded'; end if;
 end $$;
 
--- Storage bucket must be private and constrained.
 do $$
 declare b storage.buckets;
 begin
