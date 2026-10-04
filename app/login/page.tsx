@@ -18,7 +18,7 @@ export default function Login() {
     try {
       const supabase = createClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
+      if (signInError) throw new Error("Email or password is incorrect.");
       window.location.assign("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
@@ -35,6 +35,7 @@ export default function Login() {
         <form className="card form" onSubmit={submit}>
           <label>Email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
           <label>Password<input required type="password" minLength={8} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+          <p className="muted"><Link href="/forgot-password">Forgot your password?</Link></p>
           {error ? <p className="error" role="alert">{error}</p> : null}
           <button className="btn primary" type="submit" disabled={loading}>{loading ? "Signing in…" : "Sign in"}</button>
           <p className="muted">New to Avenlo? <Link href="/join">Create an account</Link></p>
