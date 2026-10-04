@@ -11,7 +11,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=configuration", request.url));
   }
 
-  let response = NextResponse.next({ request });
+  const response = NextResponse.next({ request });
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll: () => request.cookies.getAll(),
