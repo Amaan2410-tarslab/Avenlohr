@@ -30,6 +30,7 @@ with check (
   and public.current_user_role() = 'company'
 );
 
+drop policy if exists "staff manage companies" on public.companies;
 create policy "staff manage companies" on public.companies
 for all to authenticated
 using (public.current_user_role() in ('staff','founder'))
@@ -40,12 +41,14 @@ with check (public.current_user_role() in ('staff','founder'));
 --    manufacture candidate records.
 -- -----------------------------------------------------------------------------
 drop policy if exists "users manage own candidate profile" on public.candidate_profiles;
+drop policy if exists "candidates manage own candidate profile" on public.candidate_profiles;
 create policy "candidates manage own candidate profile" on public.candidate_profiles
 for all to authenticated
 using (user_id = auth.uid() and public.current_user_role() = 'candidate')
 with check (user_id = auth.uid() and public.current_user_role() = 'candidate');
 
 drop policy if exists "users manage own skills" on public.candidate_skills;
+drop policy if exists "candidates manage own skills" on public.candidate_skills;
 create policy "candidates manage own skills" on public.candidate_skills
 for all to authenticated
 using (user_id = auth.uid() and public.current_user_role() = 'candidate')
@@ -76,6 +79,7 @@ with check (
   )
 );
 
+drop policy if exists "staff manage jobs" on public.jobs;
 create policy "staff manage jobs" on public.jobs
 for all to authenticated
 using (public.current_user_role() in ('staff','founder'))
@@ -112,6 +116,7 @@ for each row execute function public.protect_job_identity();
 --    Candidates also cannot delete applications.
 -- -----------------------------------------------------------------------------
 drop policy if exists "candidates manage own applications" on public.applications;
+drop policy if exists "candidates create own applications" on public.applications;
 create policy "candidates create own applications" on public.applications
 for insert to authenticated
 with check (
@@ -123,15 +128,18 @@ with check (
   and exists (select 1 from public.jobs j where j.id = job_id and j.status = 'open')
 );
 
+drop policy if exists "candidates read own applications" on public.applications;
 create policy "candidates read own applications" on public.applications
 for select to authenticated
 using (candidate_id = auth.uid());
 
+drop policy if exists "staff manage applications" on public.applications;
 create policy "staff manage applications" on public.applications
 for all to authenticated
 using (public.current_user_role() in ('staff','founder'))
 with check (public.current_user_role() in ('staff','founder'));
 
+drop policy if exists "company read applications" on public.applications;
 create policy "company read applications" on public.applications
 for select to authenticated
 using (
@@ -167,7 +175,6 @@ for each row execute function public.protect_application_identity();
 --    Audit rows are inserted only by trusted SECURITY DEFINER trigger functions.
 -- -----------------------------------------------------------------------------
 drop policy if exists "authenticated write audit" on public.audit_logs;
-
 revoke insert, update, delete on public.audit_logs from authenticated;
 
 create or replace function public.write_audit_log(
@@ -236,6 +243,7 @@ for each row execute function public.validate_resume_path();
 -- 8. Staff/founder-only profile administration. Ordinary users cannot grant
 --    themselves privileged lifecycle states.
 -- -----------------------------------------------------------------------------
+drop policy if exists "staff manage profiles" on public.profiles;
 create policy "staff manage profiles" on public.profiles
 for update to authenticated
 using (public.current_user_role() in ('staff','founder'))
