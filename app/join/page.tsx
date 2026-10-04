@@ -20,11 +20,15 @@ export default function Join() {
     setError(null);
 
     try {
+      if (password.length < 8) throw new Error("Password must be at least 8 characters.");
       const supabase = createClient();
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName, account_type: accountType } },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: { full_name: fullName, account_type: accountType },
+        },
       });
       if (signUpError) throw signUpError;
       if (data.session) {
