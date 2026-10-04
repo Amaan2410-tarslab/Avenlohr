@@ -1,13 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const protectedPrefixes = ["/dashboard", "/company", "/staff"];
+
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !anonKey) return response;
+  if (!url || !anonKey) {
+    return NextResponse.redirect(new URL("/login?error=configuration", request.url));
+  }
 
+  let response = NextResponse.next({ request });
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll: () => request.cookies.getAll(),
@@ -20,10 +24,17 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user && protectedPrefixes.some((prefix) => request.nextUrl.pathname.startsWith(prefix))) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
   return response;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/dashboard/:path*", "/company/:path*", "/staff/:path*"],
 };
