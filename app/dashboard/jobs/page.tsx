@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { JobCard } from "./job-card";
 
+export const dynamic = "force-dynamic";
+
 type CompanyRelation = { name?: string } | Array<{ name?: string }> | null;
 
 type JobRow = {
