@@ -44,7 +44,7 @@ export default function CandidateProfilePage() {
       ]);
 
       if (profileError) setError("Unable to load your profile.");
-      if (profileData) setProfile({ ...profile, ...profileData });
+      if (profileData) setProfile((current) => ({ ...current, ...profileData }));
       if (candidateData) setCandidate(candidateData as Candidate);
       setSkills((skillData ?? []).map((item) => item.skill).join(", "));
       setLoading(false);
@@ -68,14 +68,13 @@ export default function CandidateProfilePage() {
       }
 
       let resumePath = candidate.resume_path;
-      let newResumePath: string | null = null;
       if (resume) {
         if (resume.size > 10 * 1024 * 1024) throw new Error("CV must be 10 MB or smaller.");
         const allowed = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
         if (!allowed.includes(resume.type)) throw new Error("Upload a PDF, DOC, or DOCX CV.");
         const extension = resume.name.split(".").pop()?.toLowerCase();
         if (!extension || !["pdf", "doc", "docx"].includes(extension)) throw new Error("Upload a PDF, DOC, or DOCX CV.");
-        newResumePath = `${user.id}/resume.${extension}`;
+        const newResumePath = `${user.id}/resume.${extension}`;
         const { error: uploadError } = await supabase.storage.from("candidate-documents").upload(newResumePath, resume, { upsert: true, contentType: resume.type });
         if (uploadError) throw new Error("Unable to upload CV.");
         resumePath = newResumePath;
