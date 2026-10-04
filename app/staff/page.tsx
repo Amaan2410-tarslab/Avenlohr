@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { JobModeration } from "./job-moderation";
 import { ApplicationReview } from "./application-review";
 import { ProfileStatusControl } from "./profile-status-control";
+import { ReportStatusControl } from "./report-status-control";
 import { SignOutButton } from "@/app/components/sign-out-button";
 
 type CompanyRelation = { name?: string } | Array<{ name?: string }> | null;
@@ -21,12 +22,13 @@ export default async function StaffWorkspace() {
 
   if (current?.role !== "staff" && current?.role !== "founder") redirect("/dashboard");
 
-  const [{ data: users }, { data: candidates }, { data: companies }, { data: jobs }, { data: applications }, { data: auditLogs }] = await Promise.all([
+  const [{ data: users }, { data: candidates }, { data: companies }, { data: jobs }, { data: applications }, { data: reports }, { data: auditLogs }] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, role, status, created_at").order("created_at", { ascending: false }).limit(100),
     supabase.from("profiles").select("id, full_name, headline, location, status").eq("role", "candidate").order("created_at", { ascending: false }).limit(50),
     supabase.from("companies").select("id, name, industry, location, owner_id, created_at").order("created_at", { ascending: false }).limit(50),
     supabase.from("jobs").select("id, title, status, company_id, expires_at, companies(name)").order("created_at", { ascending: false }).limit(50),
     supabase.from("applications").select("id, candidate_id, job_id, status, match_score, created_at").order("created_at", { ascending: false }).limit(50),
+    supabase.from("moderation_reports").select("id, reporter_id, target_type, target_id, reason, status, created_at").order("created_at", { ascending: false }).limit(50),
     supabase.from("audit_logs").select("id, actor_id, action, entity_type, entity_id, metadata, created_at").order("created_at", { ascending: false }).limit(50),
   ]);
 
@@ -105,6 +107,19 @@ export default async function StaffWorkspace() {
             <ApplicationReview applicationId={application.id} matchScore={application.match_score} />
           </article>)}
           {!applications?.length ? <p className="muted">No applications yet.</p> : null}
+        </div>
+      </div>
+
+      <div className="section">
+        <h2>Moderation reports</h2>
+        <div className="grid">
+          {(reports ?? []).map((report) => <article className="card" key={report.id}>
+            <span className="eyebrow">{report.status} · {report.target_type}</span>
+            <h3>{report.reason}</h3>
+            <p className="muted">Target: {report.target_id}<br />Reported {new Date(report.created_at).toLocaleString()}</p>
+            <ReportStatusControl reportId={report.id} status={report.status as "open" | "reviewing" | "resolved" | "dismissed"} />
+          </article>)}
+          {!reports?.length ? <p className="muted">No moderation reports yet.</p> : null}
         </div>
       </div>
 
