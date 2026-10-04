@@ -344,4 +344,58 @@ begin
   end;
 end $$;
 
+-- Moderation report isolation and staff-only resolution.
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
+
+insert into public.moderation_reports(reporter_id,target_type,target_id,reason)
+values (
+  '00000000-0000-0000-0000-000000000001',
+  'job',
+  (select id from public.jobs where title='Other Company Job'),
+  'The role contains suspicious or inaccurate information.'
+);
+
+do $$
+declare n integer;
+begin
+  select count(*) into n from public.moderation_reports where reporter_id='00000000-0000-0000-0000-000000000001';
+  if n <> 1 then raise exception 'B9 failed: reporter cannot read own report'; end if;
+end $$;
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
+
+do $$
+declare n integer;
+begin
+  select count(*) into n
+  from public.moderation_reports
+  where target_type='job'
+    and target_id=(select id from public.jobs where title='Other Company Job');
+  if n <> 0 then raise exception 'B9 failed: another candidate read private report'; end if;
+end $$;
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000004',false);
+
+do $$
+declare n integer;
+begin
+  select count(*) into n from public.moderation_reports;
+  if n <> 1 then raise exception 'B9 failed: staff cannot review report'; end if;
+end $$;
+
+update public.moderation_reports
+set status='resolved'
+where target_type='job'
+  and target_id=(select id from public.jobs where title='Other Company Job');
+
+do $$
+declare s text;
+begin
+  select status into s
+  from public.moderation_reports
+  where target_type='job'
+    and target_id=(select id from public.jobs where title='Other Company Job');
+  if s <> 'resolved' then raise exception 'B9 failed: staff cannot resolve report'; end if;
+end $$;
+
 select 'RLS ATTACK SUITE PASSED' as result;
