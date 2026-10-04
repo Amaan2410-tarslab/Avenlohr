@@ -26,7 +26,6 @@ and not exists (select 1 from public.jobs where title = 'Security Test Job');
 set role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 
--- B1: forged hiring state/match data must be neutralized.
 insert into public.applications(job_id, candidate_id, status, match_score, match_explanation)
 select id, '00000000-0000-0000-0000-000000000001', 'hired', 100, '{"forged":true}'::jsonb
 from public.jobs where title = 'Security Test Job'
@@ -37,25 +36,18 @@ declare r public.applications;
 begin
   select a.* into r from public.applications a join public.jobs j on j.id = a.job_id
   where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
-  if r.status <> 'submitted' or r.match_score is not null or r.match_explanation <> '{}'::jsonb then
-    raise exception 'B1 failed: candidate-controlled review fields survived';
-  end if;
+  if r.status <> 'submitted' or r.match_score is not null or r.match_explanation <> '{}'::jsonb then raise exception 'B1 failed: candidate-controlled review fields survived'; end if;
 end $$;
 
--- B1: RLS may silently filter DELETE, so assert the row remains.
 do $$
 declare before_count integer; after_count integer;
 begin
-  select count(*) into before_count from public.applications a join public.jobs j on j.id = a.job_id
-  where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
-  delete from public.applications a using public.jobs j
-  where a.job_id = j.id and a.candidate_id = '00000000-0000-0000-0000-000000000001' and j.title = 'Security Test Job';
-  select count(*) into after_count from public.applications a join public.jobs j on j.id = a.job_id
-  where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
+  select count(*) into before_count from public.applications a join public.jobs j on j.id = a.job_id where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
+  delete from public.applications a using public.jobs j where a.job_id = j.id and a.candidate_id = '00000000-0000-0000-0000-000000000001' and j.title = 'Security Test Job';
+  select count(*) into after_count from public.applications a join public.jobs j on j.id = a.job_id where j.title = 'Security Test Job' and a.candidate_id = '00000000-0000-0000-0000-000000000001';
   if before_count <> 1 or after_count <> 1 then raise exception 'B1 failed: candidate application deletion succeeded'; end if;
 end $$;
 
--- Role escalation.
 update public.profiles set role = 'founder', status = 'active' where id = '00000000-0000-0000-0000-000000000001';
 do $$
 declare r public.profiles;
@@ -64,18 +56,15 @@ begin
   if r.role <> 'candidate' then raise exception 'role escalation succeeded'; end if;
 end $$;
 
--- B3: arbitrary audit insertion.
 do $$
 begin
   begin
-    insert into public.audit_logs(actor_id, action, entity_type, metadata)
-    values ('00000000-0000-0000-0000-000000000001', 'role.granted', 'profile', '{"granted":"founder"}'::jsonb);
+    insert into public.audit_logs(actor_id, action, entity_type, metadata) values ('00000000-0000-0000-0000-000000000001', 'role.granted', 'profile', '{"granted":"founder"}'::jsonb);
     raise exception 'B3 failed: candidate inserted audit row';
   exception when insufficient_privilege then null;
   end;
 end $$;
 
--- B4: candidate cannot create a company.
 do $$
 begin
   begin
@@ -85,25 +74,21 @@ begin
   end;
 end $$;
 
--- Company identity cannot create another candidate profile.
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 do $$
 begin
   begin
-    insert into public.candidate_profiles(user_id, experience_years)
-    values ('00000000-0000-0000-0000-000000000002', 1);
+    insert into public.candidate_profiles(user_id, experience_years) values ('00000000-0000-0000-0000-000000000002', 1);
     raise exception 'B4 failed: company created candidate profile';
   exception when insufficient_privilege then null;
   end;
 end $$;
 
--- Company job creation cannot spoof created_by.
 do $$
 begin
   begin
     insert into public.jobs(company_id, created_by, title, description, status)
-    select c.id, '00000000-0000-0000-0000-000000000002', 'Spoofed Job', 'Attack', 'open'
-    from public.companies c where c.owner_id = '00000000-0000-0000-0000-000000000003';
+    select c.id, '00000000-0000-0000-0000-000000000002', 'Spoofed Job', 'Attack', 'open' from public.companies c where c.owner_id = '00000000-0000-0000-0000-000000000003';
     raise exception 'created_by spoof succeeded';
   exception when others then
     if sqlerrm like 'created_by spoof succeeded' then raise; end if;
@@ -111,8 +96,7 @@ begin
 end $$;
 
 insert into public.jobs(company_id, created_by, title, description, status)
-select c.id, '00000000-0000-0000-0000-000000000003', 'Moderation Test Job', 'Company-created job', 'open'
-from public.companies c where c.owner_id = '00000000-0000-0000-0000-000000000003';
+select c.id, '00000000-0000-0000-0000-000000000003', 'Moderation Test Job', 'Company-created job', 'open' from public.companies c where c.owner_id = '00000000-0000-0000-0000-000000000003';
 
 do $$
 declare s public.job_status;
@@ -121,7 +105,6 @@ begin
   if s <> 'pending_review' then raise exception 'company published a job without moderation'; end if;
 end $$;
 
--- Duplicate company name for same owner.
 do $$
 begin
   begin
@@ -131,30 +114,28 @@ begin
   end;
 end $$;
 
--- Negative experience.
+-- Run the database CHECK test as the candidate who owns candidate B's profile.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
 do $$
 begin
   begin
-    insert into public.candidate_profiles(user_id, experience_years)
-    values ('00000000-0000-0000-0000-000000000002', -50);
+    insert into public.candidate_profiles(user_id, experience_years) values ('00000000-0000-0000-0000-000000000002', -50);
     raise exception 'negative experience accepted';
   exception when check_violation then null;
   end;
 end $$;
 
--- Cross-user resume path.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 do $$
 begin
   begin
-    update public.candidate_profiles set resume_path = '00000000-0000-0000-0000-000000000002/resume.pdf'
-    where user_id = '00000000-0000-0000-0000-000000000001';
+    update public.candidate_profiles set resume_path = '00000000-0000-0000-0000-000000000002/resume.pdf' where user_id = '00000000-0000-0000-0000-000000000001';
     raise exception 'cross-user resume path accepted';
   exception when others then
     if sqlerrm like 'cross-user resume path accepted' then raise; end if;
   end;
 end $$;
 
--- Storage writes to another user's folder and root.
 do $$
 begin
   begin
@@ -169,16 +150,13 @@ begin
   end;
 end $$;
 
-insert into storage.objects(bucket_id, name)
-values ('candidate-documents', '00000000-0000-0000-0000-000000000001/resume.pdf');
+insert into storage.objects(bucket_id, name) values ('candidate-documents', '00000000-0000-0000-0000-000000000001/resume.pdf');
 
--- Staff privilege boundaries.
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', false);
 do $$
 declare app_id uuid; job_id uuid;
 begin
-  select a.id into app_id from public.applications a join public.jobs j on j.id=a.job_id
-  where j.title='Security Test Job' and a.candidate_id='00000000-0000-0000-0000-000000000001';
+  select a.id into app_id from public.applications a join public.jobs j on j.id=a.job_id where j.title='Security Test Job' and a.candidate_id='00000000-0000-0000-0000-000000000001';
   begin
     update public.applications set candidate_id='00000000-0000-0000-0000-000000000002' where id=app_id;
     raise exception 'staff changed application candidate_id';
@@ -193,13 +171,11 @@ begin
   end;
 end $$;
 
--- Cross-user CV read.
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 do $$
 declare n integer;
 begin
-  select count(*) into n from storage.objects
-  where bucket_id='candidate-documents' and name = '00000000-0000-0000-0000-000000000002/resume.pdf';
+  select count(*) into n from storage.objects where bucket_id='candidate-documents' and name = '00000000-0000-0000-0000-000000000002/resume.pdf';
   if n <> 0 then raise exception 'cross-user CV read succeeded'; end if;
 end $$;
 
