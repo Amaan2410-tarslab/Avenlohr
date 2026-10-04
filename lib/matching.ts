@@ -59,12 +59,13 @@ export function explainMatch(requirement: MatchRequirement, candidate: Candidate
   const skill = overlap(requirement.skills, candidate.skills);
   const requiredExperienceYears = requirement.experienceYears;
   const experienceActive = requiredExperienceYears != null && Number.isFinite(requiredExperienceYears) && requiredExperienceYears >= 0;
+  const experienceYears = requiredExperienceYears ?? 0;
   const experience = experienceActive
     ? candidate.experienceYears == null || !Number.isFinite(candidate.experienceYears)
       ? 0
-      : requiredExperienceYears === 0
+      : experienceYears === 0
         ? 1
-        : Math.min(Math.max(candidate.experienceYears, 0) / requiredExperienceYears, 1)
+        : Math.min(Math.max(candidate.experienceYears, 0) / experienceYears, 1)
     : 0;
 
   const seniority = fieldScore(requirement.seniority, candidate.seniority, "seniority");
