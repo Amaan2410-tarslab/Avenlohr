@@ -70,3 +70,11 @@ grant usage on schema public, auth, storage to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant select, insert, update, delete on storage.objects to authenticated;
 grant select, insert, update, delete on storage.buckets to authenticated;
+
+-- Migrations create the application tables after this harness runs. Mirror the
+-- baseline Supabase Data API grants for those future tables so the RLS tests
+-- exercise policy enforcement rather than failing at the SQL privilege layer.
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public
+  grant usage, select on sequences to authenticated;
