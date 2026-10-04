@@ -12,10 +12,7 @@ describe("explainMatch", () => {
   });
 
   it("identifies missing skills without treating omitted criteria as failures", () => {
-    const result = explainMatch(
-      { skills: ["React", "TypeScript", "AWS"] },
-      { skills: ["React"] },
-    );
+    const result = explainMatch({ skills: ["React", "TypeScript", "AWS"] }, { skills: ["React"] });
     expect(result.score).toBeLessThan(100);
     expect(result.signals.skills).toEqual(["react"]);
   });
@@ -50,5 +47,20 @@ describe("explainMatch", () => {
     expect(result.signals.skills).toEqual(["nodejs", "react"]);
     expect(result.signals.seniority).toBe(1);
     expect(result.signals.workMode).toBe(1);
+  });
+
+  it("treats a zero-year requirement as satisfied by any valid candidate experience", () => {
+    const result = explainMatch({ skills: [], experienceYears: 0 }, { skills: [], experienceYears: 0 });
+    expect(result.score).toBe(100);
+    expect(result.signals.experience).toBe(1);
+  });
+
+  it("does not penalize a remote role for location mismatch", () => {
+    const result = explainMatch(
+      { skills: ["React"], location: "Hyderabad", workMode: "remote" },
+      { skills: ["React"], location: "Bengaluru", workMode: "remote" },
+    );
+    expect(result.score).toBe(100);
+    expect(result.signals.location).toBe(0);
   });
 });
