@@ -1,5 +1,6 @@
 -- Production bucket configuration for candidate resumes.
 -- Keep this in migrations so the security boundary is reproducible across environments.
+-- Migration 0015: explicitly apply the candidate-documents bucket security boundary.
 insert into storage.buckets (
   id,
   name,
