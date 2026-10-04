@@ -7,15 +7,18 @@
 --    administrative delete capability.
 -- -----------------------------------------------------------------------------
 drop policy if exists "staff manage jobs" on public.jobs;
+drop policy if exists "staff review jobs" on public.jobs;
 create policy "staff review jobs" on public.jobs
 for update to authenticated
 using (public.current_user_role() = 'staff')
 with check (public.current_user_role() = 'staff');
 
+drop policy if exists "staff read jobs" on public.jobs;
 create policy "staff read jobs" on public.jobs
 for select to authenticated
 using (public.current_user_role() = 'staff');
 
+drop policy if exists "founders manage jobs" on public.jobs;
 create policy "founders manage jobs" on public.jobs
 for all to authenticated
 using (public.current_user_role() = 'founder')
@@ -43,9 +46,8 @@ set
   ]
 where id = 'candidate-documents';
 
--- Candidates may only upload canonical resume filenames. This prevents an
--- authenticated candidate from filling their namespace with arbitrary files.
 drop policy if exists "candidates upload own documents" on storage.objects;
+drop policy if exists "candidates upload own resumes" on storage.objects;
 create policy "candidates upload own resumes" on storage.objects
 for insert to authenticated
 with check (
@@ -55,8 +57,8 @@ with check (
   and lower((storage.filename(name))) in ('resume.pdf', 'resume.doc', 'resume.docx')
 );
 
--- Keep updates in the same candidate namespace and canonical filename set.
 drop policy if exists "candidates update own documents" on storage.objects;
+drop policy if exists "candidates update own resumes" on storage.objects;
 create policy "candidates update own resumes" on storage.objects
 for update to authenticated
 using (
