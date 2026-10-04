@@ -3,12 +3,8 @@
 -- 0003 and makes the migration sequence unambiguous by moving the security
 -- definer search-path hardening into 0011.
 
--- Candidates must never delete submitted applications. Applications are part
--- of the review record and may only be removed by cascading parent deletion or
--- privileged administration.
 drop policy if exists "candidates delete own applications" on public.applications;
 
--- Re-assert the candidate insert boundary after all prior policy migrations.
 drop policy if exists "candidates create own applications" on public.applications;
 create policy "candidates create own applications"
 on public.applications
@@ -26,9 +22,6 @@ with check (
   )
 );
 
--- Pin security-definer helpers to an empty search_path. Fully-qualified
--- references prevent search_path injection when these functions execute with
--- elevated privileges.
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -183,8 +176,9 @@ security definer
 set search_path = ''
 as $$
 declare
-  expected_prefix text := new.user_id::text || '/';
+  expected_prefix text;
 begin
+  expected_prefix := new.user_id::text || '/';
   if new.resume_path is not null and pg_catalog.position(expected_prefix in new.resume_path) <> 1 then
     raise exception 'resume_path must belong to candidate storage folder';
   end if;
