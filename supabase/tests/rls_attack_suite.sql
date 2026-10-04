@@ -127,13 +127,13 @@ declare s public.job_status;
 begin
   select status into s from public.jobs where title='Draft Test Job';
   if s <> 'draft' then raise exception 'B8 failed: company draft was auto-published to review'; end if;
-end $;
+end $$;
 do $
 declare s public.job_status;
 begin
   select status into s from public.jobs where title='Moderation Test Job';
   if s <> 'pending_review' then raise exception 'company published a job without moderation'; end if;
-end $;
+end $$;
 
 update public.jobs
 set title='Edited Security Test Job',
@@ -145,7 +145,7 @@ declare s public.job_status;
 begin
   select status into s from public.jobs where title='Edited Security Test Job';
   if s <> 'pending_review' then raise exception 'B8 failed: material edit bypassed re-review'; end if;
-end $;
+end $$;
 
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
@@ -246,7 +246,7 @@ begin
 
   select count(*) into n from public.candidate_profiles where user_id='00000000-0000-0000-0000-000000000002';
   if n <> 0 then raise exception 'B5 failed: company read cross-company candidate profile'; end if;
-end $;
+end $$;
 
 update public.applications
 set status='shortlisted',
@@ -268,7 +268,7 @@ begin
   if r.match_score is not null or r.match_explanation <> '{}'::jsonb then
     raise exception 'B5 failed: company forged match fields';
   end if;
-end $;
+end $$;
 
 update public.applications
 set status='hired'
@@ -285,7 +285,7 @@ begin
     and status='submitted';
 
   if n <> 1 then raise exception 'B5 failed: company modified cross-company application'; end if;
-end $;
+end $$;
 
 -- Candidate A retains access to an application-linked job after it closes.
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000005',false);
@@ -307,7 +307,7 @@ begin
   from public.companies c
   where c.id=(select company_id from public.jobs where title='Security Test Job');
   if n <> 1 then raise exception 'B6 failed: candidate cannot see applied company'; end if;
-end $;
+end $$;
 
 -- Structured education ownership.
 insert into public.candidate_education(user_id, institution, degree)
@@ -318,7 +318,7 @@ declare n integer;
 begin
   select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
   if n <> 1 then raise exception 'B7 failed: candidate cannot read own education'; end if;
-end $;
+end $$;
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
 do $
@@ -326,7 +326,7 @@ declare n integer;
 begin
   select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
   if n <> 0 then raise exception 'B7 failed: cross-user education read succeeded'; end if;
-end $;
+end $$;
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',false);
 do $
@@ -342,6 +342,6 @@ begin
     raise exception 'B7 failed: company modified candidate education';
   exception when insufficient_privilege then null;
   end;
-end $;
+end $$;
 
 select 'RLS ATTACK SUITE PASSED' as result;
