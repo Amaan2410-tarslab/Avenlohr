@@ -16,11 +16,8 @@ export type CandidateSignals = {
   industry?: string;
 };
 
-const normalise = (value: string) =>
-  value.trim().toLowerCase().replace(/[._-]+/g, " ").replace(/\s+/g, " ");
-
-const normaliseSkill = (value: string) =>
-  value.trim().toLowerCase().replace(/[^a-z0-9+#]/g, "");
+const normalise = (value: string) => value.trim().toLowerCase().replace(/[._-]+/g, " ").replace(/\s+/g, " ");
+const normaliseSkill = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9+#]/g, "");
 
 const normaliseSeniority = (value: string) => {
   const valueKey = normalise(value);
@@ -33,8 +30,9 @@ const normaliseSeniority = (value: string) => {
 
 const normaliseWorkMode = (value: string) => {
   const valueKey = normalise(value);
-  if (["wfh", "work from home", "fully remote"].includes(valueKey)) return "remote";
+  if (["wfh", "work from home", "fully remote", "remote"].includes(valueKey)) return "remote";
   if (["onsite", "on site", "office"].includes(valueKey)) return "onsite";
+  if (["hybrid", "hybrid work"].includes(valueKey)) return "hybrid";
   return valueKey;
 };
 
@@ -46,26 +44,14 @@ function overlap(required: string[], actual: string[]) {
   const requiredUnique = uniqueNormalised(required, normaliseSkill);
   const available = new Set(uniqueNormalised(actual, normaliseSkill));
   const matched = requiredUnique.filter((item) => available.has(item));
-  return {
-    matched,
-    ratio: requiredUnique.length ? matched.length / requiredUnique.length : 0,
-    active: requiredUnique.length > 0,
-  };
+  return { matched, ratio: requiredUnique.length ? matched.length / requiredUnique.length : 0, active: requiredUnique.length > 0 };
 }
 
 function fieldScore(required: string | undefined, actual: string | undefined, kind: "normal" | "seniority" | "workMode" = "normal") {
   if (!required?.trim()) return { score: 0, active: false };
   if (!actual?.trim()) return { score: 0, active: true };
-  const requiredValue = kind === "seniority"
-    ? normaliseSeniority(required)
-    : kind === "workMode"
-      ? normaliseWorkMode(required)
-      : normalise(required);
-  const actualValue = kind === "seniority"
-    ? normaliseSeniority(actual)
-    : kind === "workMode"
-      ? normaliseWorkMode(actual)
-      : normalise(actual);
+  const requiredValue = kind === "seniority" ? normaliseSeniority(required) : kind === "workMode" ? normaliseWorkMode(required) : normalise(required);
+  const actualValue = kind === "seniority" ? normaliseSeniority(actual) : kind === "workMode" ? normaliseWorkMode(actual) : normalise(actual);
   return { score: requiredValue === actualValue ? 1 : 0, active: true };
 }
 
@@ -75,22 +61,22 @@ export function explainMatch(requirement: MatchRequirement, candidate: Candidate
   const experience = experienceActive
     ? candidate.experienceYears == null || !Number.isFinite(candidate.experienceYears)
       ? 0
-      : Math.min(Math.max(candidate.experienceYears, 0) / Math.max(requirement.experienceYears, 1), 1)
+      : requirement.experienceYears === 0
+        ? 1
+        : Math.min(Math.max(candidate.experienceYears, 0) / requirement.experienceYears, 1)
     : 0;
 
   const seniority = fieldScore(requirement.seniority, candidate.seniority, "seniority");
   const location = fieldScore(requirement.location, candidate.location);
   const workMode = fieldScore(requirement.workMode, candidate.workMode, "workMode");
   const industry = fieldScore(requirement.industry, candidate.industry);
+  const remoteRequirement = requirement.workMode ? normaliseWorkMode(requirement.workMode) === "remote" : false;
 
-  // A missing requirement contributes no weight. This prevents empty skill arrays
-  // or other omitted fields from handing a candidate free points. If a job has no
-  // structured requirements at all, its match score is 0 until requirements exist.
   const weightedSignals = [
     { value: skill.ratio, weight: 40, active: skill.active },
     { value: experience, weight: 20, active: experienceActive },
     { value: seniority.score, weight: 10, active: seniority.active },
-    { value: location.score, weight: 10, active: location.active && normaliseWorkMode(requirement.workMode ?? "") !== "remote" },
+    { value: location.score, weight: 10, active: location.active && !remoteRequirement },
     { value: workMode.score, weight: 10, active: workMode.active },
     { value: industry.score, weight: 10, active: industry.active },
   ].filter((signal) => signal.active);
@@ -101,13 +87,6 @@ export function explainMatch(requirement: MatchRequirement, candidate: Candidate
 
   return {
     score: Math.max(0, Math.min(100, score)),
-    signals: {
-      skills: skill.matched,
-      experience,
-      seniority: seniority.score,
-      location: location.score,
-      workMode: workMode.score,
-      industry: industry.score,
-    },
+    signals: { skills: skill.matched, experience, seniority: seniority.score, location: location.score, workMode: workMode.score, industry: industry.score },
   };
 }
