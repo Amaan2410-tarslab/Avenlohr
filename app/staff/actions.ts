@@ -145,3 +145,30 @@ export async function setProfileStatus(input: {
 
   return { ok: true, message: "Account marked " + parsed.data.status + "." };
 }
+
+export async function updateReportStatus(input: {
+  reportId: string;
+  status: "open" | "reviewing" | "resolved" | "dismissed";
+}) {
+  const parsed = z.object({
+    reportId: z.string().uuid(),
+    status: z.enum(["open", "reviewing", "resolved", "dismissed"]),
+  }).safeParse(input);
+
+  if (!parsed.success) return { ok: false, message: "Invalid report update." };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, message: "Session expired." };
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (profile?.role !== "staff" && profile?.role !== "founder") return { ok: false, message: "Not authorized." };
+
+  const { error } = await supabase
+    .from("moderation_reports")
+    .update({ status: parsed.data.status })
+    .eq("id", parsed.data.reportId);
+
+  if (error) return { ok: false, message: "Unable to update report." };
+  return { ok: true, message: "Report marked " + parsed.data.status + "." };
+}
