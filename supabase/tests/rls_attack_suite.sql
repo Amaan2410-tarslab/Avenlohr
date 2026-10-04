@@ -122,13 +122,13 @@ insert into public.jobs(company_id,created_by,title,description,status)
 select c.id,'00000000-0000-0000-0000-000000000003','Draft Test Job','Company draft fixture','draft'
 from public.companies c where c.owner_id='00000000-0000-0000-0000-000000000003';
 
-do $
+do $$
 declare s public.job_status;
 begin
   select status into s from public.jobs where title='Draft Test Job';
   if s <> 'draft' then raise exception 'B8 failed: company draft was auto-published to review'; end if;
 end $$;
-do $
+do $$
 declare s public.job_status;
 begin
   select status into s from public.jobs where title='Moderation Test Job';
@@ -140,7 +140,7 @@ set title='Edited Security Test Job',
     description='Edited company-created job'
 where title='Security Test Job';
 
-do $
+do $$
 declare s public.job_status;
 begin
   select status into s from public.jobs where title='Edited Security Test Job';
@@ -232,7 +232,7 @@ on conflict (job_id, candidate_id) do nothing;
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',false);
 
-do $
+do $$
 declare n integer;
 begin
   select count(*) into n from public.profiles where id='00000000-0000-0000-0000-000000000001';
@@ -255,7 +255,7 @@ set status='shortlisted',
 where candidate_id='00000000-0000-0000-0000-000000000001'
   and job_id=(select id from public.jobs where title='Security Test Job');
 
-do $
+do $$
 declare r public.applications;
 begin
   select a.* into r
@@ -275,7 +275,7 @@ set status='hired'
 where candidate_id='00000000-0000-0000-0000-000000000002'
   and job_id=(select id from public.jobs where title='Other Company Job');
 
-do $
+do $$
 declare n integer;
 begin
   select count(*) into n
@@ -295,7 +295,7 @@ where title='Security Test Job';
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
 
-do $
+do $$
 declare n integer;
 begin
   select count(*) into n
@@ -313,7 +313,7 @@ end $$;
 insert into public.candidate_education(user_id, institution, degree)
 values ('00000000-0000-0000-0000-000000000001','Avenlo University','B.Sc.');
 
-do $
+do $$
 declare n integer;
 begin
   select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
@@ -321,7 +321,7 @@ begin
 end $$;
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
-do $
+do $$
 declare n integer;
 begin
   select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
@@ -329,7 +329,7 @@ begin
 end $$;
 
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',false);
-do $
+do $$
 declare n integer;
 begin
   select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
