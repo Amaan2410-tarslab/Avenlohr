@@ -398,4 +398,34 @@ begin
   if s <> 'resolved' then raise exception 'B9 failed: staff cannot resolve report'; end if;
 end $$;
 
+-- Suspension must revoke role-gated data access at the database boundary.
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000005',false);
+
+update public.profiles
+set status='suspended'
+where id='00000000-0000-0000-0000-000000000001';
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
+
+do $$
+declare n integer;
+begin
+  select count(*) into n from public.jobs where status='open';
+  if n <> 0 then raise exception 'B10 failed: suspended candidate still reads open jobs'; end if;
+
+  select count(*) into n from public.applications;
+  if n <> 0 then raise exception 'B10 failed: suspended candidate still reads applications'; end if;
+
+  select count(*) into n from public.candidate_profiles;
+  if n <> 0 then raise exception 'B10 failed: suspended candidate still reads candidate profile'; end if;
+
+  select count(*) into n from public.moderation_reports;
+  if n <> 0 then raise exception 'B10 failed: suspended candidate still reads moderation reports'; end if;
+end $$;
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000005',false);
+update public.profiles
+set status='active'
+where id='00000000-0000-0000-0000-000000000001';
+
 select 'RLS ATTACK SUITE PASSED' as result;
