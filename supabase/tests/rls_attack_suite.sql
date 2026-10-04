@@ -6,20 +6,28 @@ insert into auth.users(id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-000000000002', 'candidate-b@example.test', '{"full_name":"Candidate B"}'),
   ('00000000-0000-0000-0000-000000000003', 'company-a@example.test', '{"full_name":"Company A","account_type":"company"}'),
   ('00000000-0000-0000-0000-000000000004', 'staff@example.test', '{"full_name":"Staff"}'),
-  ('00000000-0000-0000-0000-000000000005', 'founder@example.test', '{"full_name":"Founder"}')
+  ('00000000-0000-0000-0000-000000000005', 'founder@example.test', '{"full_name":"Founder"}'),
+  ('00000000-0000-0000-0000-000000000006', 'company-b@example.test', '{"full_name":"Company B","account_type":"company"}')
 on conflict (id) do nothing;
 
 update public.profiles set role = 'staff' where id = '00000000-0000-0000-0000-000000000004';
 update public.profiles set role = 'founder' where id = '00000000-0000-0000-0000-000000000005';
 
 insert into public.companies(owner_id, name)
-values ('00000000-0000-0000-0000-000000000003', 'Avenlo Test Co')
+values
+  ('00000000-0000-0000-0000-000000000003', 'Avenlo Test Co'),
+  ('00000000-0000-0000-0000-000000000006', 'Avenlo Other Co')
 on conflict do nothing;
 
 insert into public.jobs(company_id, created_by, title, description, status)
 select id, '00000000-0000-0000-0000-000000000005', 'Security Test Job', 'Open fixture', 'open'
 from public.companies where owner_id = '00000000-0000-0000-0000-000000000003'
 and not exists (select 1 from public.jobs where title = 'Security Test Job');
+
+insert into public.jobs(company_id, created_by, title, description, status)
+select id, '00000000-0000-0000-0000-000000000005', 'Other Company Job', 'Other-company fixture', 'open'
+from public.companies where owner_id = '00000000-0000-0000-0000-000000000006'
+and not exists (select 1 from public.jobs where title = 'Other Company Job');
 
 insert into public.candidate_profiles(user_id, experience_years)
 values
@@ -183,5 +191,133 @@ begin
   if not ('application/msword'=any(b.allowed_mime_types)) then raise exception 'DOC MIME type missing'; end if;
   if not ('application/vnd.openxmlformats-officedocument.wordprocessingml.document'=any(b.allowed_mime_types)) then raise exception 'DOCX MIME type missing'; end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Recruiter boundary regression.
+-- Company A may read/update Candidate A because Candidate A applied to A's job,
+-- but may not read Candidate B or manipulate Candidate B's application.
+-- ---------------------------------------------------------------------------
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
+
+insert into public.applications(job_id, candidate_id)
+select id, '00000000-0000-0000-0000-000000000002'
+from public.jobs
+where title='Other Company Job'
+on conflict (job_id, candidate_id) do nothing;
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',false);
+
+do $
+declare n integer;
+begin
+  select count(*) into n from public.profiles where id='00000000-0000-0000-0000-000000000001';
+  if n <> 1 then raise exception 'B5 failed: company cannot read its own applicant'; end if;
+
+  select count(*) into n from public.profiles where id='00000000-0000-0000-0000-000000000002';
+  if n <> 0 then raise exception 'B5 failed: company read cross-company candidate'; end if;
+
+  select count(*) into n from public.candidate_profiles where user_id='00000000-0000-0000-0000-000000000001';
+  if n <> 1 then raise exception 'B5 failed: company cannot read applicant profile'; end if;
+
+  select count(*) into n from public.candidate_profiles where user_id='00000000-0000-0000-0000-000000000002';
+  if n <> 0 then raise exception 'B5 failed: company read cross-company candidate profile'; end if;
+end $;
+
+update public.applications
+set status='shortlisted',
+    match_score=100,
+    match_explanation='{"forged":true}'::jsonb
+where candidate_id='00000000-0000-0000-0000-000000000001'
+  and job_id=(select id from public.jobs where title='Security Test Job');
+
+do $
+declare r public.applications;
+begin
+  select a.* into r
+  from public.applications a
+  join public.jobs j on j.id=a.job_id
+  where a.candidate_id='00000000-0000-0000-0000-000000000001'
+    and j.title='Security Test Job';
+
+  if r.status <> 'shortlisted' then raise exception 'B5 failed: company status update was rejected'; end if;
+  if r.match_score is not null or r.match_explanation <> '{}'::jsonb then
+    raise exception 'B5 failed: company forged match fields';
+  end if;
+end $;
+
+update public.applications
+set status='hired'
+where candidate_id='00000000-0000-0000-0000-000000000002'
+  and job_id=(select id from public.jobs where title='Other Company Job');
+
+do $
+declare n integer;
+begin
+  select count(*) into n
+  from public.applications
+  where candidate_id='00000000-0000-0000-0000-000000000002'
+    and job_id=(select id from public.jobs where title='Other Company Job')
+    and status='submitted';
+
+  if n <> 1 then raise exception 'B5 failed: company modified cross-company application'; end if;
+end $;
+
+-- Candidate A retains access to an application-linked job after it closes.
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000005',false);
+update public.jobs
+set status='closed'
+where title='Security Test Job';
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
+
+do $
+declare n integer;
+begin
+  select count(*) into n
+  from public.jobs
+  where id=(select id from public.jobs where title='Security Test Job');
+  if n <> 1 then raise exception 'B6 failed: candidate cannot track closed applied job'; end if;
+
+  select count(*) into n
+  from public.companies c
+  where c.id=(select company_id from public.jobs where title='Security Test Job');
+  if n <> 1 then raise exception 'B6 failed: candidate cannot see applied company'; end if;
+end $;
+
+-- Structured education ownership.
+insert into public.candidate_education(user_id, institution, degree)
+values ('00000000-0000-0000-0000-000000000001','Avenlo University','B.Sc.');
+
+do $
+declare n integer;
+begin
+  select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
+  if n <> 1 then raise exception 'B7 failed: candidate cannot read own education'; end if;
+end $;
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
+do $
+declare n integer;
+begin
+  select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
+  if n <> 0 then raise exception 'B7 failed: cross-user education read succeeded'; end if;
+end $;
+
+select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',false);
+do $
+declare n integer;
+begin
+  select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
+  if n <> 1 then raise exception 'B7 failed: company cannot read applicant education'; end if;
+
+  begin
+    update public.candidate_education
+    set degree='Forged'
+    where user_id='00000000-0000-0000-0000-000000000001';
+    raise exception 'B7 failed: company modified candidate education';
+  exception when insufficient_privilege then null;
+  end;
+end $;
 
 select 'RLS ATTACK SUITE PASSED' as result;
