@@ -1,0 +1,95 @@
+name: Verify
+
+on:
+  push:
+    branches: ["main", "feature/avenlo-production"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+env:
+  # Build-only placeholders. Production deployments must provide the real Supabase values.
+  NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+  NEXT_PUBLIC_SITE_URL: http://localhost:3000
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: avenlo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d avenlo_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Secret pattern scan
+        shell: bash
+        run: |
+          if git grep -nE 'SUPABASE_SERVICE_ROLE|service_role|BEGIN (RSA|OPENSSH|EC|DSA) PRIVATE KEY' -- . ':(exclude).git*'; then
+            echo "Potential secret material found in repository."
+            exit 1
+          fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E smoke tests
+        run: npm run test:e2e
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Prepare RLS regression database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d avenlo_test -v ON_ERROR_STOP=1 -f supabase/tests/rls_harness_setup.sql
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying $migration"
+            psql -h localhost -U postgres -d avenlo_test -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Run RLS attack regression suite
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d avenlo_test -v ON_ERROR_STOP=1 -f supabase/tests/rls_attack_suite.sql

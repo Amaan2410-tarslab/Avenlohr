@@ -1,0 +1,57 @@
+-- Break the applications <-> companies RLS recursion.
+-- The applications company-ownership policy must not query companies through
+-- RLS because candidate company visibility legitimately queries applications.
+-- A trusted helper evaluates ownership with RLS bypassed and is callable only
+-- from authenticated requests.
+
+create or replace function public.company_owns_application(
+  p_application_id uuid,
+  p_owner_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.applications a
+    join public.jobs j on j.id = a.job_id
+    where a.id = p_application_id
+      and j.company_id in (
+        select c.id
+        from public.companies c
+        where c.owner_id = p_owner_id
+      )
+  );
+$$;
+
+revoke all on function public.company_owns_application(uuid, uuid) from public, anon;
+grant execute on function public.company_owns_application(uuid, uuid) to authenticated;
+
+drop policy if exists "companies read own applicant applications" on public.applications;
+create policy "companies read own applicant applications"
+on public.applications
+for select to authenticated
+using (
+  public.current_user_role() in ('staff', 'founder')
+  or (
+    public.current_user_role() = 'company'
+    and public.company_owns_application(id, (select auth.uid()))
+  )
+);
+
+drop policy if exists "companies update own applicant status" on public.applications;
+create policy "companies update own applicant status"
+on public.applications
+for update to authenticated
+using (
+  public.current_user_role() = 'company'
+  and public.company_owns_application(id, (select auth.uid()))
+)
+with check (
+  public.current_user_role() = 'company'
+  and public.company_owns_application(id, (select auth.uid()))
+);
