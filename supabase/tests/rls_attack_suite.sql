@@ -374,13 +374,27 @@ begin
   select count(*) into n from public.candidate_education where user_id='00000000-0000-0000-0000-000000000001';
   if n <> 1 then raise exception 'B7 failed: company cannot read applicant education'; end if;
 
+  do $education_update$
+  declare changed_count integer;
   begin
     update public.candidate_education
     set degree='Forged'
     where user_id='00000000-0000-0000-0000-000000000001';
-    raise exception 'B7 failed: company modified candidate education';
-  exception when insufficient_privilege then null;
-  end;
+
+    get diagnostics changed_count = row_count;
+    if changed_count <> 0 then
+      raise exception 'B7 failed: company modified candidate education';
+    end if;
+
+    if exists (
+      select 1
+      from public.candidate_education
+      where user_id='00000000-0000-0000-0000-000000000001'
+        and degree='Forged'
+    ) then
+      raise exception 'B7 failed: company modified candidate education';
+    end if;
+  end $education_update$;
 end $test$;
 
 -- Moderation report isolation and staff-only resolution.
